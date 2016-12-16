@@ -6,6 +6,9 @@ import org.apache.logging.log4j.Logger;
 import java.io.*;
 import java.util.Properties;
 
+/**
+ * This Class handles all the IO of the server.properties file in the world's folder.
+ */
 class PropertyManagerClient
 {
 

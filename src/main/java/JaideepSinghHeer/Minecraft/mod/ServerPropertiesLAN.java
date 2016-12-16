@@ -11,6 +11,18 @@ import java.io.*;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+/**
+ * We cannot use the {@link Mod} annotation as the mod is already instantiated
+ * via the {@link IFMLLoadingPlugin} interface as a CoreMod.
+ *
+ * We need it to be a CoreMod so that we can Edit the ByteCode
+ * using the {@link net.minecraft.launchwrapper.IClassTransformer} interface.
+ *
+ * We Edit the ByteCode of the {@link net.minecraft.util.HttpUtil} class to return our specified Port for LAN connections.
+ * @see net.minecraft.util.HttpUtil for the getSuitableLanPort() method which returns a LAN port.
+ *
+ */
+
 //@Mod(modid = ServerPropertiesLAN.MODID,name=ServerPropertiesLAN.MODNAME, version = ServerPropertiesLAN.VERSION,clientSideOnly = true,acceptableRemoteVersions = "*",useMetadata = true)
 public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadingPlugin
 {
@@ -19,14 +31,25 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
     public static final String MODID = "serverpropertieslan";
     public static final String MODNAME = "Server Properties LAN";
     public static final String VERSION = "2";
+
+    // This Class manages all the File IO.
     private PropertyManagerClient ServerProperties = null;
+    // Logger to get output in The Log.
     private static final org.apache.logging.log4j.Logger LOGGER = org.apache.logging.log4j.LogManager.getLogger();
 
+    /**
+     * We don't want to do a lot of work so we extend {@link DummyModContainer}.
+     * As it contains a {@link ModMetadata} object,
+     * it must be initialised.
+     *
+     */
     public ServerPropertiesLAN()
     {
         super(new ModMetadata());
         System.out.println("-=-=-=-=-=-=-=ServerPropertiesLAN-Constructed=-=-=-=-=-=-=-");
+        // static instance to always get the correct object.
         instance = this;
+        // Mod Metadata defined in DummyModContainer received by func. getMetadata()
         ModMetadata md = getMetadata();
         md.modId=MODID;
         md.version=VERSION;
@@ -39,6 +62,13 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         md.url = "https://minecraft.curseforge.com/projects/server-properties-for-lan";
     }
 
+    /**
+     * We cannot use {@link net.minecraftforge.fml.common.Mod.EventHandler} as that is a part of the {@link Mod} annotation
+     * and hence requires a Class to be annotated with the {@link Mod} annotation which cannot be done for CoreMods.<See Above>
+     *
+     * Therefore we must register this class to the {@link EventBus} provided to it for being the {@link ModContainer}.
+     *
+     */
     @Override
     public boolean registerBus(EventBus bus, LoadController controller)
     {
@@ -47,8 +77,23 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         return true;
     }
 
+    /**
+     * The static instance of this Class to be accessed as a Mod.
+     * Forge automatically instantiates an Object for us
+     * and we assign that to this object(called instance) in the constructor.
+     */
     public static ServerPropertiesLAN instance;
 
+    /**
+     * This function is subscribed to the {@link EventBus} via the {@link Subscribe} annotation.
+     * The type of event({@link net.minecraftforge.fml.common.eventhandler.Event}) to be subscribed is judged from the prototype.
+     * This function gets the {@link net.minecraft.server.MinecraftServer} from the event
+     * and gets the world save directory using the {@link DimensionManager}.
+     *
+     * It then uses the {@link PropertyManagerClient} Class to save/load data from the server.properties file
+     * and sets the attributes of the {@link net.minecraft.server.MinecraftServer} via its functions.
+     *
+     */
     @Subscribe
     public void onServerStarting(FMLServerStartingEvent event) {
         System.out.println("========================>> Server Starting !");
@@ -61,13 +106,17 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         event.getServer().setCanSpawnNPCs(ServerProperties.getBooleanProperty("spawn-npcs", true));
         event.getServer().setAllowPvp(ServerProperties.getBooleanProperty("pvp", true));
         event.getServer().setAllowFlight(ServerProperties.getBooleanProperty("allow-flight", false));
-        event.getServer().setResourcePack(ServerProperties.getStringProperty("resource-pack", ""), this.loadResourcePackSHA());
+        event.getServer().setResourcePack(ServerProperties.getStringProperty("resource-pack-sha1", ""), this.loadResourcePackSHA());
         event.getServer().setMOTD(ServerProperties.getStringProperty("motd", "<! "+event.getServer().getServerOwner() + "'s " + event.getServer().worldServers[0].getWorldInfo().getWorldName()+" ON LAN !>"));
         event.getServer().setPlayerIdleTimeout(ServerProperties.getIntProperty("player-idle-timeout", 0));
         event.getServer().setBuildLimit(ServerProperties.getIntProperty("max-build-height", 256));
         //if(!Minecraft.getMinecraft().getVersion().substring(0,3).equalsIgnoreCase("1.8")) PlayerProfileCache.setOnlineMode(event.getServer().isServerInOnlineMode());
     }
 
+    /**
+     * These functions are a part of the {@link IFMLLoadingPlugin} interface.
+     * @see IFMLLoadingPlugin for details.
+     */
     @Override
     public String[] getASMTransformerClass() {
         return new String[]{SPLANtransformerPort.class.getCanonicalName()};
@@ -94,6 +143,10 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
     }
 
 
+    /**
+     * This function checks the current ResoursePackSHA's validity
+     * and returns the final ResoursePackSHA values of the server.
+     */
     private String loadResourcePackSHA()
     {
         if (ServerProperties.hasProperty("resource-pack-hash"))

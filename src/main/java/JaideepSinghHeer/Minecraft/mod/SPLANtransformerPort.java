@@ -10,7 +10,27 @@ import org.objectweb.asm.tree.*;
 import java.io.IOException;
 import java.net.ServerSocket;
 
+
+/**
+ * This Class acts as the {@link IClassTransformer} for the ByteCode Editing during Compilation.
+ * It is used on all the ByteCode files and is hence given a chance to Edit any ByteCode file.
+ * Every ByteCode file before compilation undergoes Transformation by all the Classes derived from {@link IClassTransformer}
+ * and registered as TransformerClasses by the {@link net.minecraftforge.fml.relauncher.IFMLLoadingPlugin} Classes.
+ *
+ * Hence, once registered, this Class can Edit the ByteCode of any Minecraft Class during Compilation.
+ * <Probalby> :)
+ *
+ */
 public class SPLANtransformerPort implements IClassTransformer {
+    /**
+     * This is the main and only function called during Compilation for ByteCode Manipulation.
+     *
+     * @param name I have no idea about what that is. <Sorry> :)
+     * @param transformedName It is the canonical Class name of the Class whose ByteCode is currently being compiled.
+     * @param basicClass It is the ByteArray which stores the Original ByteCode of this Class.
+     *
+     * @return It returns the ByteArray which should be Compiled instead, i.e. It returns the new edited ByteCode..!
+     */
     @Override
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
         //System.out.println("--------------------> Trying Injection (PORT) !");
@@ -20,8 +40,10 @@ public class SPLANtransformerPort implements IClassTransformer {
 
             // Create a new ClassNode to roam around the Class file.
             ClassNode node = new ClassNode();
+
             // Assign a ClassReader to the basicClass byte array, i.e. similar to asigning buffer to input.
             ClassReader reader = new ClassReader(basicClass);
+
             // Attach node to the ClassReader(similar to buffer)
             reader.accept(node, 0);
 
@@ -50,6 +72,7 @@ public class SPLANtransformerPort implements IClassTransformer {
 
             // Create a ClassWriter and tell it to automatically manage Stack Size
             ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+
             // Attach ClassWriter to node(similar to output buffer)
             node.accept(writer);
 
@@ -60,6 +83,20 @@ public class SPLANtransformerPort implements IClassTransformer {
         else
         return basicClass;
     }
+
+    /**
+     * This function is made to replace the serversocket.getLocalPort() function call
+     * in the getSuitableLanPort() function of the {@link net.minecraft.util.HttpUtil} Class.
+     *
+     * The getSuitableLanPort() function call is searched-for in the ByteCode
+     * and is then replaced by a call to this function
+     * which returns the same DataType, i.e. Integer.
+     *
+     * Hence the variable 'i' in the getSuitableLanPort() function of the {@link net.minecraft.util.HttpUtil} Class
+     * stores the return value of our custom function
+     * which is then returned back to be open as a LAN Port ...!
+     *
+     */
     public static int getPort()
     {
         System.out.println("Port To Set : "+ServerPropertiesLAN.instance.port);
