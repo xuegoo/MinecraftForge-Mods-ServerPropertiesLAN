@@ -3,11 +3,16 @@ package JaideepSinghHeer.Minecraft.mod;
 import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.management.PlayerList;
+import net.minecraft.server.management.UserListWhitelist;
 import net.minecraftforge.common.DimensionManager;
+import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.fml.common.*;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
 import java.io.*;
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -24,9 +29,12 @@ import java.util.regex.Pattern;
  */
 
 //@Mod(modid = ServerPropertiesLAN.MODID,name=ServerPropertiesLAN.MODNAME, version = ServerPropertiesLAN.VERSION,clientSideOnly = true,acceptableRemoteVersions = "*",useMetadata = true)
+
 public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadingPlugin
 {
     public int port=-1;
+    private static boolean whiteListFirstRun;
+    private static MinecraftServer server;
 
     public static final String MODID = "serverpropertieslan";
     public static final String MODNAME = "Server Properties LAN";
@@ -46,6 +54,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
     public ServerPropertiesLAN()
     {
         super(new ModMetadata());
+        whiteListFirstRun = false;
         System.out.println("-=-=-=-=-=-=-=ServerPropertiesLAN-Constructed=-=-=-=-=-=-=-");
         // static instance to always get the correct object.
         instance = this;
@@ -101,16 +110,72 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         LOGGER.warn(DimensionManager.getCurrentSaveRootDirectory()+"\\server.properties");
         port = ServerProperties.getIntProperty("port", 25565);
         System.out.println("-------------------> Port Read : "+port);
-        event.getServer().setOnlineMode(ServerProperties.getBooleanProperty("online-mode", true));
-        event.getServer().setCanSpawnAnimals(ServerProperties.getBooleanProperty("spawn-animals", true));
-        event.getServer().setCanSpawnNPCs(ServerProperties.getBooleanProperty("spawn-npcs", true));
-        event.getServer().setAllowPvp(ServerProperties.getBooleanProperty("pvp", true));
-        event.getServer().setAllowFlight(ServerProperties.getBooleanProperty("allow-flight", false));
-        event.getServer().setResourcePack(ServerProperties.getStringProperty("resource-pack-sha1", ""), this.loadResourcePackSHA());
-        event.getServer().setMOTD(ServerProperties.getStringProperty("motd", "<! "+event.getServer().getServerOwner() + "'s " + event.getServer().worldServers[0].getWorldInfo().getWorldName()+" ON LAN !>"));
-        event.getServer().setPlayerIdleTimeout(ServerProperties.getIntProperty("player-idle-timeout", 0));
-        event.getServer().setBuildLimit(ServerProperties.getIntProperty("max-build-height", 256));
+        server = event.getServer();
+        server.setOnlineMode(ServerProperties.getBooleanProperty("online-mode", true));
+        server.setCanSpawnAnimals(ServerProperties.getBooleanProperty("spawn-animals", true));
+        server.setCanSpawnNPCs(ServerProperties.getBooleanProperty("spawn-npcs", true));
+        server.setAllowPvp(ServerProperties.getBooleanProperty("pvp", true));
+        server.setAllowFlight(ServerProperties.getBooleanProperty("allow-flight", false));
+        server.setResourcePack(ServerProperties.getStringProperty("resource-pack-sha1", ""), this.loadResourcePackSHA());
+        server.setMOTD(ServerProperties.getStringProperty("motd", "<! "+server.getServerOwner() + "'s " + server.worldServers[0].getWorldInfo().getWorldName()+" ON LAN !>"));
+        server.setPlayerIdleTimeout(ServerProperties.getIntProperty("player-idle-timeout", 0));
+        server.setBuildLimit(ServerProperties.getIntProperty("max-build-height", 256));
+
+        // Get the PlayerList Settings Object
+        PlayerList customPlayerList =  server.getPlayerList();
+
+        // REFLECTION !!
+        try {
+            // Set MaxPlayers
+            Field field = PlayerList.class.getDeclaredField("maxPlayers");
+            field.setAccessible(true);
+            field.set(customPlayerList, ServerProperties.getIntProperty("max-players", customPlayerList.getMaxPlayers()));
+
+            if (ServerProperties.getBooleanProperty("white-list", false))
+            {
+                File whitelistjson = new File(DimensionManager.getCurrentSaveRootDirectory() + "\\whitelist.json");
+                UserListWhitelist whitelist = new UserListWhitelist(whitelistjson);
+                if(!whitelistjson.exists()) {
+                    whitelistjson.createNewFile();
+                    whitelist.writeChanges();
+                    whiteListFirstRun = true;
+                    // Set WhiteList
+                    field = PlayerList.class.getDeclaredField("whiteListedPlayers");
+                    field.setAccessible(true);
+                    field.set(customPlayerList, whitelist);
+                }
+                else {
+                    // Not In First Run.
+                    customPlayerList.setWhiteListEnabled(true);
+                }
+            }
+            server.setPlayerList(customPlayerList);
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+
         //if(!Minecraft.getMinecraft().getVersion().substring(0,3).equalsIgnoreCase("1.8")) PlayerProfileCache.setOnlineMode(event.getServer().isServerInOnlineMode());
+    }
+
+    /**
+     * This doesn't work sadly ! :(
+     * The Event is never fired on the client side it seems :(
+     * */
+    @Subscribe
+    public void onPlayerConnect(EntityJoinWorldEvent e) {
+        System.out.println("==================>> Player Connect");
+        if (whiteListFirstRun) {
+            System.out.println("--------------ID="+e.getEntity().getUniqueID()+"\tNAME="+e.getEntity().getName());
+            server.getPlayerList().addWhitelistedPlayer(e.getEntity().getServer().getPlayerList().getAllProfiles()[0]);
+            server.getPlayerList().setWhiteListEnabled(true);
+            try {
+                server.getPlayerList().getWhitelistedPlayers().writeChanges();
+            } catch (IOException e1) {
+                e1.printStackTrace();
+            }
+        }
     }
 
     /**
