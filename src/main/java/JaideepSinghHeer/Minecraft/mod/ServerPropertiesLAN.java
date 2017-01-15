@@ -9,8 +9,11 @@ import net.minecraft.server.management.UserListWhitelist;
 import net.minecraftforge.common.DimensionManager;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.fml.common.*;
+import net.minecraftforge.fml.common.asm.transformers.deobf.FMLDeobfuscatingRemapper;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
+import net.minecraftforge.fml.relauncher.ReflectionHelper;
+
 import java.io.*;
 import java.lang.reflect.Field;
 import java.util.Map;
@@ -38,7 +41,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
 
     public static final String MODID = "serverpropertieslan";
     public static final String MODNAME = "Server Properties LAN";
-    public static final String VERSION = "2.2";
+    public static final String VERSION = "2.3";
 
     // This Class manages all the File IO.
     private PropertyManagerClient ServerProperties = null;
@@ -111,7 +114,6 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         ServerProperties = new PropertyManagerClient(new File(DimensionManager.getCurrentSaveRootDirectory()+"\\server.properties"));
         LOGGER.warn(DimensionManager.getCurrentSaveRootDirectory()+"\\server.properties");
         port = ServerProperties.getIntProperty("port", 25565);
-        System.out.println("-------------------> Port Read : "+port);
         server = event.getServer();
         server.setOnlineMode(ServerProperties.getBooleanProperty("online-mode", true));
         server.setCanSpawnAnimals(ServerProperties.getBooleanProperty("spawn-animals", true));
@@ -119,28 +121,45 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         server.setAllowPvp(ServerProperties.getBooleanProperty("pvp", true));
         server.setAllowFlight(ServerProperties.getBooleanProperty("allow-flight", false));
         server.setResourcePack(ServerProperties.getStringProperty("resource-pack-sha1", ""), this.loadResourcePackSHA());
-        server.setMOTD(ServerProperties.getStringProperty("motd", "<! "+server.getServerOwner() + "'s " + server.worldServers[0].getWorldInfo().getWorldName()+" ON LAN !>"));
+        server.setMOTD(ServerProperties.getStringProperty("motd", "<! "+server.getServerOwner() + "'s " + server.worlds[0].getWorldInfo().getWorldName()+" ON LAN !>"));
         server.setPlayerIdleTimeout(ServerProperties.getIntProperty("player-idle-timeout", 0));
         server.setBuildLimit(ServerProperties.getIntProperty("max-build-height", 256));
+
+        // Print data to the console
+        LOGGER.info("Server Data :- ");
+        LOGGER.info("online-mode = "+server.isServerInOnlineMode());
+        LOGGER.info("spawn-animals = "+server.getCanSpawnAnimals());
+        LOGGER.info("spawn-npcs = "+server.getCanSpawnNPCs());
+        LOGGER.info("pvp = "+server.isPVPEnabled());
+        LOGGER.info("allow-flight = "+server.isFlightAllowed());
+        LOGGER.info("player-idle-timeout = "+server.getMaxPlayerIdleMinutes());
+        LOGGER.info("max-build-height = "+server.getBuildLimit());
+        LOGGER.info("resource-pack-sha1 = "+server.getResourcePackHash());
+        LOGGER.info("motd = "+server.getMOTD());
 
         // Get the PlayerList Settings Object
         PlayerList customPlayerList =  server.getPlayerList();
 
         // REFLECTION !!
+        // NOTE : We need to make sure it works after obfuscation and so we use the ReflectionHelper class
+        // which basically lets us specify many possible names for the field ...!
         try {
             // Set MaxPlayers
-            Field field = PlayerList.class.getDeclaredField("maxPlayers");
+            Field field = ReflectionHelper.findField(PlayerList.class,"maxPlayers","field_72405_c");
             field.setAccessible(true);
             field.set(customPlayerList, ServerProperties.getIntProperty("max-players", 1));
+            LOGGER.info("Max Players = "+customPlayerList.getMaxPlayers());
 
             // Set MaxViewDistance
-            Field dist = PlayerList.class.getDeclaredField("viewDistance");
+            Field dist = ReflectionHelper.findField(PlayerList.class,"viewDistance","field_72402_d");
             dist.setAccessible(true);
             int d = ServerProperties.getIntProperty("max-view-distance", 0);
-            if(d>0)dist.set(customPlayerList, d);
+            if(d>0){dist.set(customPlayerList, d);LOGGER.info("Max view distance = "+d);}
+            else LOGGER.info("Using default view distance algorithm.");
 
             if (ServerProperties.getBooleanProperty("white-list", false))
             {
+                LOGGER.warn("=====>>WARNING whitelisting enabled...! Make sure at least one user entry is in the whitelist.json file !");
                 File whitelistjson = new File(DimensionManager.getCurrentSaveRootDirectory() + "\\whitelist.json");
                 UserListWhitelist whitelist = new UserListWhitelist(whitelistjson);
                 if(!whitelistjson.exists()) {
@@ -148,7 +167,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
                     whitelist.writeChanges();
                     whiteListFirstRun = true;
                     // Set WhiteList
-                    field = PlayerList.class.getDeclaredField("whiteListedPlayers");
+                    field = ReflectionHelper.findField(PlayerList.class,"whiteListedPlayers","field_72411_j");
                     field.setAccessible(true);
                     field.set(customPlayerList, whitelist);
                 }
@@ -176,7 +195,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         System.out.println("==================>> Player Connect");
         if (whiteListFirstRun) {
             System.out.println("--------------ID="+e.getEntity().getUniqueID()+"\tNAME="+e.getEntity().getName());
-            server.getPlayerList().addWhitelistedPlayer(e.getEntity().getServer().getPlayerList().getAllProfiles()[0]);
+            server.getPlayerList().addWhitelistedPlayer(e.getEntity().getServer().getPlayerList().getOnlinePlayerProfiles()[0]);
             server.getPlayerList().setWhiteListEnabled(true);
             try {
                 server.getPlayerList().getWhitelistedPlayers().writeChanges();
