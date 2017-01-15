@@ -38,7 +38,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
 
     public static final String MODID = "serverpropertieslan";
     public static final String MODNAME = "Server Properties LAN";
-    public static final String VERSION = "2";
+    public static final String VERSION = "2.1";
 
     // This Class manages all the File IO.
     private PropertyManagerClient ServerProperties = null;
@@ -120,6 +120,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         server.setMOTD(ServerProperties.getStringProperty("motd", "<! "+server.getServerOwner() + "'s " + server.worldServers[0].getWorldInfo().getWorldName()+" ON LAN !>"));
         server.setPlayerIdleTimeout(ServerProperties.getIntProperty("player-idle-timeout", 0));
         server.setBuildLimit(ServerProperties.getIntProperty("max-build-height", 256));
+        server.worldServers[0].getEntityTracker().setViewDistance(ServerProperties.getIntProperty("max-view-distance", 8));
 
         // Get the PlayerList Settings Object
         PlayerList customPlayerList =  server.getPlayerList();
@@ -129,7 +130,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
             // Set MaxPlayers
             Field field = PlayerList.class.getDeclaredField("maxPlayers");
             field.setAccessible(true);
-            field.set(customPlayerList, ServerProperties.getIntProperty("max-players", customPlayerList.getMaxPlayers()));
+            field.set(customPlayerList, ServerProperties.getIntProperty("max-players", 1));
 
             if (ServerProperties.getBooleanProperty("white-list", false))
             {
