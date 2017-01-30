@@ -3,6 +3,9 @@ package JaideepSinghHeer.Minecraft.mod;
 import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
+import com.google.common.io.Files;
+import com.typesafe.config.ConfigIncluderClasspath;
+import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.management.PlayerList;
 import net.minecraft.server.management.UserListWhitelist;
@@ -10,6 +13,7 @@ import net.minecraftforge.common.DimensionManager;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.fml.common.*;
 import net.minecraftforge.fml.common.asm.transformers.deobf.FMLDeobfuscatingRemapper;
+import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
 import net.minecraftforge.fml.relauncher.ReflectionHelper;
@@ -41,7 +45,8 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
  
     public static final String MODID = "serverpropertieslan";
     public static final String MODNAME = "Server Properties LAN";
-    public static final String VERSION = "2.3";
+    public static final String VERSION = "2.4";
+    private static File configDirectory;
 
     // This Class manages all the File IO.
     private PropertyManagerClient ServerProperties = null;
@@ -74,6 +79,16 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         md.logoFile = "logo.png";
         md.screenshots = new String[]{"scr1.jpg", "Untitled.jpg", "logo2.png"};
         md.url = "https://minecraft.curseforge.com/projects/server-properties-for-lan";
+    }
+
+    /**
+     * Recieves the FMLPreinitialization Event to set the Mod's config directory.
+     * @param e
+     */
+    @Mod.EventHandler
+    public void preInit(FMLPreInitializationEvent e)
+    {
+        configDirectory = e.getModConfigurationDirectory();
     }
 
     /**
@@ -111,8 +126,26 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
     @Subscribe
     public void onServerStarting(FMLServerStartingEvent event) {
         System.out.println("========================>> Server Starting !");
-        ServerProperties = new PropertyManagerClient(new File(DimensionManager.getCurrentSaveRootDirectory()+"\\server.properties"));
-        LOGGER.warn(DimensionManager.getCurrentSaveRootDirectory()+"\\server.properties");
+        // Define the config files.
+        File local = new File(DimensionManager.getCurrentSaveRootDirectory()+"\\server.properties");
+        File global = new File(Minecraft.getMinecraft().mcDataDir+"/config/serverGlobalConfig.properties");
+
+        if(local.exists()) {
+            ServerProperties = new PropertyManagerClient(local);
+            if(!ServerProperties.getBooleanProperty("overrideGlobalDefaults", false)) {
+                ServerProperties = new PropertyManagerClient(global);
+                LOGGER.info("Using Global Server Properties !");
+            }
+        }
+        else{
+            ServerProperties = new PropertyManagerClient(global);}
+
+            LOGGER.info("Using file : "+ServerProperties.getPropertiesFile().getPath());
+        ServerProperties.comment = "Minecraft Server Properties for LAN.";
+        ServerProperties.comment += System.getProperty("line.separator")+"For default behaviour :-";
+        ServerProperties.comment += System.getProperty("line.separator")+"set max-view-distance=0";
+        ServerProperties.comment += System.getProperty("line.separator")+"You can also delete this(or any properties) file to get it regenerated with default values.";
+
         port = ServerProperties.getIntProperty("port", 25565);
         server = event.getServer();
         server.setOnlineMode(ServerProperties.getBooleanProperty("online-mode", true));
@@ -147,7 +180,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
             // Set MaxPlayers
             Field field = ReflectionHelper.findField(PlayerList.class,"maxPlayers","field_72405_c");
             field.setAccessible(true);
-            field.set(customPlayerList, ServerProperties.getIntProperty("max-players", 1));
+            field.set(customPlayerList, ServerProperties.getIntProperty("max-players", 10));
             LOGGER.info("Max Players = "+customPlayerList.getMaxPlayers());
 
             // Set MaxViewDistance
@@ -183,7 +216,19 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
             e.printStackTrace();
         }
 
-        //if(!Minecraft.getMinecraft().getVersion().substring(0,3).equalsIgnoreCase("1.8")) PlayerProfileCache.setOnlineMode(event.getServer().isServerInOnlineMode());
+        if(!local.exists())
+        {
+            try {
+                Files.copy(global,local);
+                ServerProperties = new PropertyManagerClient(local);
+                ServerProperties.comment += System.getProperty("line.separator")+"overrideGlobalDefaults :"+System.getProperty("line.separator")+"\tspecify weather to use this file to override the global settings in the file \""+global.getAbsolutePath()+"\"";
+                ServerProperties.getBooleanProperty("overrideGlobalDefaults", false);
+                ServerProperties.saveProperties();
+            } catch (IOException e) {
+                LOGGER.error("Oops..! Couldn't copy to local server config file. Please manually copy the global server config file to your world save directory.");
+                e.printStackTrace();
+            }
+        }
     }
 
     /**

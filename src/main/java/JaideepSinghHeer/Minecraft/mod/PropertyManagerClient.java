@@ -18,9 +18,12 @@ class PropertyManagerClient
     /** The server properties file. */
     private final File serverPropertiesFile;
 
+    public String comment;
+
     public PropertyManagerClient(File propertiesFile)
     {
         this.serverPropertiesFile = propertiesFile;
+        this.comment = "Minecraft server properties";
 
         if (propertiesFile.exists())
         {
@@ -77,7 +80,7 @@ class PropertyManagerClient
         try
         {
             fileoutputstream = new FileOutputStream(this.serverPropertiesFile);
-            this.serverProperties.store((OutputStream)fileoutputstream, "Minecraft server properties");
+            this.serverProperties.store((OutputStream)fileoutputstream, comment);
         }
         catch (Exception exception)
         {
