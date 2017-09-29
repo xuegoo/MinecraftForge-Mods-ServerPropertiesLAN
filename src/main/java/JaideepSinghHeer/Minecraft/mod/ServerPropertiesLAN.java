@@ -17,6 +17,8 @@ import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
 import net.minecraftforge.fml.relauncher.ReflectionHelper;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -36,7 +38,7 @@ import java.util.regex.Pattern;
  */
 
 //@Mod(modid = ServerPropertiesLAN.MODID,name=ServerPropertiesLAN.MODNAME, version = ServerPropertiesLAN.VERSION,clientSideOnly = true,acceptableRemoteVersions = "*",useMetadata = true)
-
+@SideOnly(Side.CLIENT)
 public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadingPlugin
 {
     public int port=-1;
@@ -45,7 +47,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
  
     public static final String MODID = "serverpropertieslan";
     public static final String MODNAME = "Server Properties LAN";
-    public static final String VERSION = "2.4";
+    public static final String VERSION = "2.5";
     private static File configDirectory;
 
     // This Class manages all the File IO.
@@ -127,8 +129,8 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
     public void onServerStarting(FMLServerStartingEvent event) {
         System.out.println("========================>> Server Starting !");
         // Define the config files.
-        File local = new File(DimensionManager.getCurrentSaveRootDirectory()+"\\server.properties");
-        File global = new File(Minecraft.getMinecraft().mcDataDir+"/config/serverGlobalConfig.properties");
+        File local = new File(DimensionManager.getCurrentSaveRootDirectory()+File.separator+"server.properties");
+        File global = new File(Minecraft.getMinecraft().mcDataDir+File.separator+"config"+File.separator+"serverGlobalConfig.properties");
 
         if(local.exists()) {
             ServerProperties = new PropertyManagerClient(local);
@@ -193,7 +195,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
             if (ServerProperties.getBooleanProperty("white-list", false))
             {
                 LOGGER.warn("=====>>WARNING whitelisting enabled...! Make sure at least one user entry is in the whitelist.json file !");
-                File whitelistjson = new File(DimensionManager.getCurrentSaveRootDirectory() + "\\whitelist.json");
+                File whitelistjson = new File(DimensionManager.getCurrentSaveRootDirectory() + File.separator+"whitelist.json");
                 UserListWhitelist whitelist = new UserListWhitelist(whitelistjson);
                 if(!whitelistjson.exists()) {
                     whitelistjson.createNewFile();
