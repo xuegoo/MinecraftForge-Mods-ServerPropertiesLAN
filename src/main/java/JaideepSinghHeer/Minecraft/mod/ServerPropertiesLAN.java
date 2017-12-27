@@ -39,15 +39,16 @@ import java.util.regex.Pattern;
 
 //@Mod(modid = ServerPropertiesLAN.MODID,name=ServerPropertiesLAN.MODNAME, version = ServerPropertiesLAN.VERSION,clientSideOnly = true,acceptableRemoteVersions = "*",useMetadata = true)
 @SideOnly(Side.CLIENT)
+@IFMLLoadingPlugin.SortingIndex(1001)
 public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadingPlugin
 {
-    public int port=-1;
+    public int port=0;
     private static boolean whiteListFirstRun;
     private static MinecraftServer server;
  
     public static final String MODID = "serverpropertieslan";
     public static final String MODNAME = "Server Properties LAN";
-    public static final String VERSION = "2.5";
+    public static final String VERSION = "2.6";
     private static File configDirectory;
 
     // This Class manages all the File IO.
@@ -146,9 +147,10 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         ServerProperties.comment = "Minecraft Server Properties for LAN.";
         ServerProperties.comment += System.getProperty("line.separator")+"For default behaviour :-";
         ServerProperties.comment += System.getProperty("line.separator")+"set max-view-distance=0";
+        ServerProperties.comment += System.getProperty("line.separator")+"set port=0";
         ServerProperties.comment += System.getProperty("line.separator")+"You can also delete this(or any properties) file to get it regenerated with default values.";
 
-        port = ServerProperties.getIntProperty("port", 25565);
+        port = ServerProperties.getIntProperty("port", 0);
         server = event.getServer();
         server.setOnlineMode(ServerProperties.getBooleanProperty("online-mode", true));
         server.setCanSpawnAnimals(ServerProperties.getBooleanProperty("spawn-animals", true));
