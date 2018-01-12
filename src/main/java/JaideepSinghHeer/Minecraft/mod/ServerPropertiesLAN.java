@@ -4,21 +4,24 @@ import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import com.google.common.io.Files;
-import com.typesafe.config.ConfigIncluderClasspath;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.dedicated.ServerHangWatchdog;
+import net.minecraft.server.integrated.IntegratedServer;
 import net.minecraft.server.management.PlayerList;
 import net.minecraft.server.management.UserListWhitelist;
 import net.minecraftforge.common.DimensionManager;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.fml.common.*;
-import net.minecraftforge.fml.common.asm.transformers.deobf.FMLDeobfuscatingRemapper;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLServerStartedEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
 import net.minecraftforge.fml.relauncher.ReflectionHelper;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
+import org.apache.logging.log4j.Level;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -39,17 +42,18 @@ import java.util.regex.Pattern;
 
 //@Mod(modid = ServerPropertiesLAN.MODID,name=ServerPropertiesLAN.MODNAME, version = ServerPropertiesLAN.VERSION,clientSideOnly = true,acceptableRemoteVersions = "*",useMetadata = true)
 @SideOnly(Side.CLIENT)
+// We want our mod to load after the game is deobfuscated into SRG format by forge to make the ASM work.
 @IFMLLoadingPlugin.SortingIndex(1001)
 public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadingPlugin
 {
     public int port=0;
     private static boolean whiteListFirstRun;
-    private static MinecraftServer server;
- 
-    public static final String MODID = "serverpropertieslan";
-    public static final String MODNAME = "Server Properties LAN";
-    public static final String VERSION = "2.6";
-    private static File configDirectory;
+    private static boolean firstRun;
+    private static IntegratedServer server;
+
+    public static final String MODID = "splan";
+    public static final String MODNAME = "Server Properties for LAN";
+    public static final String VERSION = "2.61";
 
     // This Class manages all the File IO.
     private PropertyManagerClient ServerProperties = null;
@@ -82,16 +86,6 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         md.logoFile = "logo.png";
         md.screenshots = new String[]{"scr1.jpg", "Untitled.jpg", "logo2.png"};
         md.url = "https://minecraft.curseforge.com/projects/server-properties-for-lan";
-    }
-
-    /**
-     * Recieves the FMLPreinitialization Event to set the Mod's config directory.
-     * @param e
-     */
-    @Mod.EventHandler
-    public void preInit(FMLPreInitializationEvent e)
-    {
-        configDirectory = e.getModConfigurationDirectory();
     }
 
     /**
@@ -129,29 +123,57 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
     @Subscribe
     public void onServerStarting(FMLServerStartingEvent event) {
         System.out.println("========================>> Server Starting !");
+
+        // Get the current world directory.
+        String worldrootdir = DimensionManager.getCurrentSaveRootDirectory()+File.separator;
+
         // Define the config files.
-        File local = new File(DimensionManager.getCurrentSaveRootDirectory()+File.separator+"server.properties");
+        File local = new File(worldrootdir+"server.properties");
         File global = new File(Minecraft.getMinecraft().mcDataDir+File.separator+"config"+File.separator+"serverGlobalConfig.properties");
 
-        if(local.exists()) {
+        // Use the appropriate config file.
+        if(!global.exists())
+        {
+            // Probably first run. Generate global config to use.
+            firstRun = true;
+            ServerProperties = new PropertyManagerClient(global);
+        }
+        else if(local.exists()) {
             ServerProperties = new PropertyManagerClient(local);
-            if(!ServerProperties.getBooleanProperty("overrideGlobalDefaults", false)) {
-                ServerProperties = new PropertyManagerClient(global);
+            if(!ServerProperties.getBooleanProperty("overrideGlobalDefaults", true)) {
+                ServerProperties.setPropertiesFile(global);
                 LOGGER.info("Using Global Server Properties !");
             }
         }
         else{
-            ServerProperties = new PropertyManagerClient(global);}
+            // Local properties file doesn't exist.
+            try {
+                // Copy the global config to local world and use it.
+                Files.copy(global,local);
+                ServerProperties = new PropertyManagerClient(local);
+                ServerProperties.comment += System.getProperty("line.separator")+"overrideGlobalDefaults :"+System.getProperty("line.separator")+"\tspecify weather to use this file to override the global settings in the file \""+global.getAbsolutePath()+"\"";
+                ServerProperties.getBooleanProperty("overrideGlobalDefaults", false);
+                ServerProperties.saveProperties();
+            } catch (IOException e) {
+                LOGGER.log(Level.WARN,"Could not create local server config file. Using the global one.");
+                e.printStackTrace();
+                ServerProperties = new PropertyManagerClient(global);
+            }
+        }
 
-            LOGGER.info("Using file : "+ServerProperties.getPropertiesFile().getPath());
-        ServerProperties.comment = "Minecraft Server Properties for LAN.";
-        ServerProperties.comment += System.getProperty("line.separator")+"For default behaviour :-";
-        ServerProperties.comment += System.getProperty("line.separator")+"set max-view-distance=0";
-        ServerProperties.comment += System.getProperty("line.separator")+"set port=0";
-        ServerProperties.comment += System.getProperty("line.separator")+"You can also delete this(or any properties) file to get it regenerated with default values.";
+        LOGGER.info("Using file : "+(ServerProperties.getBooleanProperty("overrideGlobalDefaults", true)?local.getPath():global.getPath()));
+        // Get the server instance.
+        server = (IntegratedServer) event.getServer();
 
+        // Write comments to file
+        ServerProperties.comment = "Minecraft Server Properties for LAN."
+         + System.getProperty("line.separator")+"For default behaviour :-"
+         + System.getProperty("line.separator")+"set max-view-distance=0"
+         + System.getProperty("line.separator")+"set port=0"
+         + System.getProperty("line.separator")+"You can also delete this(or any properties) file to get it regenerated with default values.";
+
+        // Read data from the config file and set the server config.
         port = ServerProperties.getIntProperty("port", 0);
-        server = event.getServer();
         server.setOnlineMode(ServerProperties.getBooleanProperty("online-mode", true));
         server.setCanSpawnAnimals(ServerProperties.getBooleanProperty("spawn-animals", true));
         server.setCanSpawnNPCs(ServerProperties.getBooleanProperty("spawn-npcs", true));
@@ -174,12 +196,13 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         LOGGER.info("resource-pack-sha1 = "+server.getResourcePackHash());
         LOGGER.info("motd = "+server.getMOTD());
 
-        // Get the PlayerList Settings Object
+        // Get the PlayerList Settings Object for whitelist features.
         PlayerList customPlayerList =  server.getPlayerList();
 
         // REFLECTION !!
         // NOTE : We need to make sure it works after obfuscation and so we use the ReflectionHelper class
         // which basically lets us specify many possible names for the field ...!
+        // This block hacks into game to set MaxPlayers, MaxViewDistance and whitelist settings.
         try {
             // Set MaxPlayers
             Field field = ReflectionHelper.findField(PlayerList.class,"maxPlayers","field_72405_c");
@@ -191,13 +214,18 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
             Field dist = ReflectionHelper.findField(PlayerList.class,"viewDistance","field_72402_d");
             dist.setAccessible(true);
             int d = ServerProperties.getIntProperty("max-view-distance", 0);
-            if(d>0){dist.set(customPlayerList, d);LOGGER.info("Max view distance = "+d);}
-            else LOGGER.info("Using default view distance algorithm.");
+            if(d>0)
+            {
+                dist.set(customPlayerList, d);
+                LOGGER.info("Max view distance = "+d);
+            }
+            else LOGGER.info("max-view-distance is set <= 0. Using default view distance algorithm.");
 
+            // Set the server whitelist.
             if (ServerProperties.getBooleanProperty("white-list", false))
             {
                 LOGGER.warn("=====>>WARNING whitelisting enabled...! Make sure at least one user entry is in the whitelist.json file !");
-                File whitelistjson = new File(DimensionManager.getCurrentSaveRootDirectory() + File.separator+"whitelist.json");
+                File whitelistjson = new File(worldrootdir+"whitelist.json");
                 UserListWhitelist whitelist = new UserListWhitelist(whitelistjson);
                 if(!whitelistjson.exists()) {
                     whitelistjson.createNewFile();
@@ -220,11 +248,11 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
             e.printStackTrace();
         }
 
-        if(!local.exists())
+        if(firstRun)
         {
             try {
                 Files.copy(global,local);
-                ServerProperties = new PropertyManagerClient(local);
+                ServerProperties.setPropertiesFile(local);
                 ServerProperties.comment += System.getProperty("line.separator")+"overrideGlobalDefaults :"+System.getProperty("line.separator")+"\tspecify weather to use this file to override the global settings in the file \""+global.getAbsolutePath()+"\"";
                 ServerProperties.getBooleanProperty("overrideGlobalDefaults", false);
                 ServerProperties.saveProperties();

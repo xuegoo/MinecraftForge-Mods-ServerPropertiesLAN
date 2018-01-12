@@ -16,7 +16,7 @@ class PropertyManagerClient
     /** The server properties object. */
     private final Properties serverProperties = new Properties();
     /** The server properties file. */
-    private final File serverPropertiesFile;
+    private File serverPropertiesFile;
 
     public String comment;
 
@@ -67,7 +67,14 @@ class PropertyManagerClient
     public void generateNewProperties()
     {
         LOGGER.info("Generating new properties file");
-        this.saveProperties();
+        this.serverPropertiesFile.delete();
+        try {
+            this.serverPropertiesFile.createNewFile();
+            this.saveProperties();
+        } catch (IOException e) {
+            e.printStackTrace();
+            LOGGER.warn("Failed create new properties file "+this.serverPropertiesFile.getAbsolutePath());
+        }
     }
 
     /**
@@ -110,6 +117,11 @@ class PropertyManagerClient
     {
         return this.serverPropertiesFile;
     }
+
+    /**
+     * Sets this PropertyManager's file object.
+     */
+    public void setPropertiesFile(File f){this.serverPropertiesFile = f;}
 
     /**
      * Returns a string property. If the property doesn't exist the default is returned.
