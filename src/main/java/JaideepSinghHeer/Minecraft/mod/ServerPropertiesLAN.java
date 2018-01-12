@@ -5,17 +5,12 @@ import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import com.google.common.io.Files;
 import net.minecraft.client.Minecraft;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.dedicated.ServerHangWatchdog;
 import net.minecraft.server.integrated.IntegratedServer;
 import net.minecraft.server.management.PlayerList;
 import net.minecraft.server.management.UserListWhitelist;
 import net.minecraftforge.common.DimensionManager;
-import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.fml.common.*;
-import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLServerStartedEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
 import net.minecraftforge.fml.relauncher.ReflectionHelper;
@@ -50,6 +45,8 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
     private static boolean whiteListFirstRun;
     private static boolean firstRun;
     private static IntegratedServer server;
+    // ** Abandoned **
+    //private long maxTickTime;
 
     public static final String MODID = "splan";
     public static final String MODNAME = "Server Properties for LAN";
@@ -174,6 +171,8 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
 
         // Read data from the config file and set the server config.
         port = ServerProperties.getIntProperty("port", 0);
+        // ** Abandoned **
+        //maxTickTime = ServerProperties.getLongProperty("maxTickTime",-1);
         server.setOnlineMode(ServerProperties.getBooleanProperty("online-mode", true));
         server.setCanSpawnAnimals(ServerProperties.getBooleanProperty("spawn-animals", true));
         server.setCanSpawnNPCs(ServerProperties.getBooleanProperty("spawn-npcs", true));
@@ -187,6 +186,8 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         // Print data to the console
         LOGGER.info("Server Data :- ");
         LOGGER.info("online-mode = "+server.isServerInOnlineMode());
+        // ** Abandoned **
+        //LOGGER.info("maxTickTime = "+maxTickTime);
         LOGGER.info("spawn-animals = "+server.getCanSpawnAnimals());
         LOGGER.info("spawn-npcs = "+server.getCanSpawnNPCs());
         LOGGER.info("pvp = "+server.isPVPEnabled());
@@ -262,6 +263,74 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
             }
         }
     }
+
+    /*
+    /**
+     *  ** Abandoned **
+     * THIS DOESN'T WORK.
+     * initiateShutdown() causes NullPointerException for some reason.
+     * Also initiateShutdown() may be 1.9+ only.
+     * This function is subscribed to the {@link EventBus} via the {@link Subscribe} annotation.
+     * The type of event({@link net.minecraftforge.fml.common.eventhandler.Event}) to be subscribed is judged from the prototype.
+     * This function is executed by forge when the server is ready to play.
+     *
+     * It is used by SPLAN(this mod) to initiate the ServerHangWatchdog which watches the server's maxTickTime.
+     *
+     *
+    @Subscribe
+    public void onServerStarted(FMLServerStartedEvent event)
+    {
+        // Invalid maxTickTime value gets no love.
+        if(maxTickTime<1)return;
+
+        // Run a thread to keep checking the tick time of the server to see if it is greater than the maxTickTime.
+        Thread thread1 = new Thread(()->{
+            // A field in the MinecraftServer class storing the current time as thought by the server.
+            Field field = ReflectionHelper.findField(MinecraftServer.class,"currentTime","field_175591_ab");
+            field.setAccessible(true);
+
+            // Variables to store server time and calculated tick time.
+            long i,k;
+            // Boolean to avoid shutting down in the first tick.
+            boolean firstrun = true;
+            while(server.isServerRunning())
+            {
+                // Wait for a player to connect.
+                if(server.getCurrentPlayerCount()<1)
+                {
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    continue;
+                }
+                try {
+                    // Get the server's time variable value.
+                    i = (long)field.get(server);
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                    break;
+                }
+                // Calculate the current tick time.
+                k = MinecraftServer.getCurrentTimeMillis() - i;
+
+                // Avoid startup lag and check if tick time exceeds the allowed max value.
+                if(k>maxTickTime && !firstrun)
+                {
+                    LOGGER.fatal("A single server tick took {} milliseconds (should be max {})", k, maxTickTime);
+                    LOGGER.fatal("Considering it to be crashed, server will forcibly shutdown.");
+                    server.initiateShutdown();
+                    break;
+                }
+                firstrun = false;
+            }
+        });
+        thread1.setName("LAN Server Tick Watchdog");
+        thread1.setDaemon(true);
+        thread1.start();
+
+    }*/
 
     /**
      * This doesn't work sadly ! :(
