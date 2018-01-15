@@ -20,6 +20,7 @@ import org.apache.logging.log4j.Level;
 
 import java.io.*;
 import java.lang.reflect.Field;
+import java.net.URL;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -50,7 +51,8 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
 
     public static final String MODID = "splan";
     public static final String MODNAME = "Server Properties for LAN";
-    public static final String VERSION = "2.61";
+    public static final String VERSION = "2.65";
+    public static final String UPDATEURL = "https://raw.githubusercontent.com/jaideepheer/MinecraftForge-Mods-ServerPropertiesLAN/master/src/main/resources/update.json";
 
     // This Class manages all the File IO.
     private PropertyManagerClient ServerProperties = null;
@@ -421,7 +423,13 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
 
         return s;
     }
-
-
+    @Override
+    public URL getUpdateUrl()
+    {
+        try{
+        return new URL(UPDATEURL);}
+        catch (Exception e){e.printStackTrace();}
+        return null;
     }
+}
 
