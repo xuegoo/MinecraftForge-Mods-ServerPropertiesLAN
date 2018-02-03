@@ -1,24 +1,21 @@
 package JaideepSinghHeer.Minecraft.mod;
 
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.util.HttpUtil;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
 
-import java.io.IOException;
-import java.net.ServerSocket;
-
 
 /**
  * This Class acts as the {@link IClassTransformer} for the ByteCode Editing during Compilation.
  * It is used on all the ByteCode files and is hence given a chance to Edit any ByteCode file.
  * Every ByteCode file before compilation undergoes Transformation by all the Classes derived from {@link IClassTransformer}
- * and registered as TransformerClasses by the {@link net.minecraftforge.fml.relauncher.IFMLLoadingPlugin} Classes.
+ * and registered as TransformerClasses by the {@link cpw.mods.fml.relauncher.IFMLLoadingPlugin} Classes.
  *
  * Hence, once registered, this Class can Edit the ByteCode of any Minecraft Class during Compilation.
  * <Probably> :)
@@ -28,7 +25,7 @@ import java.net.ServerSocket;
 public class SPLANtransformerPort implements IClassTransformer {
     /**
      * This is the main and only function called during Compilation for ByteCode Manipulation.
-     * It changes the {@link HttpUtil#getSuitableLanPort()} function.
+     * It changes the {@link HttpUtil#func_76181_a()} function.
      * It changes the 'serversocket = new ServerSocket(0)' statement to 'serversocket = new ServerSocket(SPLANtransformerPort.getPort())'.
      * Thus using the {@link SPLANtransformerPort#getPort()} function.
      *
@@ -97,9 +94,9 @@ public class SPLANtransformerPort implements IClassTransformer {
     }
 
     /**
-     * This function is made to be called in the {@link HttpUtil#getSuitableLanPort()} function to get a suitable lan port.
+     * This function is made to be called in the {@link HttpUtil#func_76181_a()} function to get a suitable lan port.
      *
-     * The variable 'i' in the {@link HttpUtil#getSuitableLanPort()} function stores the value of our custom function
+     * The variable 'i' in the {@link HttpUtil#func_76181_a()} function stores the value of our custom function
      * which is then returned back to be open as a LAN Port ...!
      *
      */

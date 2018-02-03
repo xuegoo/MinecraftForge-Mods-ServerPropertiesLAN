@@ -4,25 +4,27 @@ import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import com.google.common.io.Files;
+import cpw.mods.fml.common.DummyModContainer;
+import cpw.mods.fml.common.LoadController;
+import cpw.mods.fml.common.Mod;
+import cpw.mods.fml.common.ModMetadata;
+import cpw.mods.fml.common.event.FMLServerStartingEvent;
+import cpw.mods.fml.relauncher.IFMLLoadingPlugin;
+import cpw.mods.fml.relauncher.ReflectionHelper;
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 import net.minecraft.client.Minecraft;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.integrated.IntegratedServer;
-import net.minecraft.server.management.PlayerList;
+import net.minecraft.server.management.ServerConfigurationManager;
 import net.minecraft.server.management.UserListWhitelist;
 import net.minecraftforge.common.DimensionManager;
-import net.minecraftforge.event.entity.EntityJoinWorldEvent;
-import net.minecraftforge.fml.common.*;
-import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
-import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
-import net.minecraftforge.fml.relauncher.ReflectionHelper;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
 import org.apache.logging.log4j.Level;
 
 import java.io.*;
 import java.lang.reflect.Field;
 import java.net.URL;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 /**
  * We cannot use the {@link Mod} annotation as the mod is already instantiated
@@ -35,7 +37,6 @@ import java.util.regex.Pattern;
  * @see net.minecraft.util.HttpUtil for the getSuitableLanPort() method which returns a LAN port.
  *
  */
-
 //@Mod(modid = ServerPropertiesLAN.MODID,name=ServerPropertiesLAN.MODNAME, version = ServerPropertiesLAN.VERSION,clientSideOnly = true,acceptableRemoteVersions = "*",useMetadata = true)
 @SideOnly(Side.CLIENT)
 // We want our mod to load after the game is deobfuscated into SRG format by forge to make the ASM work.
@@ -51,7 +52,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
 
     public static final String MODID = "splan";
     public static final String MODNAME = "Server Properties for LAN";
-    public static final String VERSION = "2.65";
+    public static final String VERSION = "2.65-1.7.10";
     public static final String UPDATEURL = "https://raw.githubusercontent.com/jaideepheer/MinecraftForge-Mods-ServerPropertiesLAN/master/src/main/resources/update.json";
 
     // This Class manages all the File IO.
@@ -80,18 +81,18 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         md.version=VERSION;
         md.name=MODNAME;
         md.authorList = Lists.newArrayList("Jaideep Singh Heer");
-        md.description = "MeoW.!";
+        md.url = "https://minecraft.curseforge.com/projects/server-properties-for-lan";
+        md.description = "MeoW.!\nGet the latest version at: "+md.updateUrl;
         md.credits = "by Jaideep Singh Heer";
         md.logoFile = "logo.png";
         md.screenshots = new String[]{"scr1.jpg", "Untitled.jpg", "logo2.png"};
-        md.url = "https://minecraft.curseforge.com/projects/server-properties-for-lan";
     }
 
     /**
-     * We cannot use {@link net.minecraftforge.fml.common.Mod.EventHandler} as that is a part of the {@link Mod} annotation
+     * We cannot use {@link cpw.mods.fml.common.Mod.EventHandler} as that is a part of the {@link Mod} annotation
      * and hence requires a Class to be annotated with the {@link Mod} annotation which cannot be done for CoreMods.<See Above>
      *
-     * Therefore we must register this class to the {@link EventBus} provided to it for being the {@link ModContainer}.
+     * Therefore we must register this class to the {@link EventBus} provided to it for being the {@link cpw.mods.fml.common.ModContainer}.
      *
      */
     @Override
@@ -111,7 +112,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
 
     /**
      * This function is subscribed to the {@link EventBus} via the {@link Subscribe} annotation.
-     * The type of event({@link net.minecraftforge.fml.common.eventhandler.Event}) to be subscribed is judged from the prototype.
+     * The type of event({@link cpw.mods.fml.common.eventhandler.Event}) to be subscribed is judged from the prototype.
      * This function gets the {@link net.minecraft.server.MinecraftServer} from the event
      * and gets the world save directory using the {@link DimensionManager}.
      *
@@ -180,9 +181,19 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         server.setCanSpawnNPCs(ServerProperties.getBooleanProperty("spawn-npcs", true));
         server.setAllowPvp(ServerProperties.getBooleanProperty("pvp", true));
         server.setAllowFlight(ServerProperties.getBooleanProperty("allow-flight", false));
-        server.setResourcePack(ServerProperties.getStringProperty("resource-pack-sha1", ""), this.loadResourcePackSHA());
-        server.setMOTD(ServerProperties.getStringProperty("motd", "<! "+server.getServerOwner() + "'s " + server.worlds[0].getWorldInfo().getWorldName()+" ON LAN !>"));
-        server.setPlayerIdleTimeout(ServerProperties.getIntProperty("player-idle-timeout", 0));
+        // set resource pack
+        {
+            Field field = ReflectionHelper.findField(MinecraftServer.class,"field_147141_M");
+            field.setAccessible(true);
+            try {
+                field.set(server, ServerProperties.getStringProperty("resource-pack", ""));
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+        }
+        server.setMOTD(ServerProperties.getStringProperty("motd", "<! "+server.getServerOwner() + "'s " + server.getWorldName()+" ON LAN !>"));
+        // Set player idle timeout
+        server.func_143006_e(ServerProperties.getIntProperty("player-idle-timeout", 0));
         server.setBuildLimit(ServerProperties.getIntProperty("max-build-height", 256));
 
         // Print data to the console
@@ -194,13 +205,14 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         LOGGER.info("spawn-npcs = "+server.getCanSpawnNPCs());
         LOGGER.info("pvp = "+server.isPVPEnabled());
         LOGGER.info("allow-flight = "+server.isFlightAllowed());
-        LOGGER.info("player-idle-timeout = "+server.getMaxPlayerIdleMinutes());
+        // get max player idle minutes
+        LOGGER.info("player-idle-timeout = "+server.func_143007_ar());
         LOGGER.info("max-build-height = "+server.getBuildLimit());
-        LOGGER.info("resource-pack-sha1 = "+server.getResourcePackHash());
+        LOGGER.info("resource-pack = "+server.getTexturePack());
         LOGGER.info("motd = "+server.getMOTD());
 
         // Get the PlayerList Settings Object for whitelist features.
-        PlayerList customPlayerList =  server.getPlayerList();
+        ServerConfigurationManager customPlayerList = server.getConfigurationManager();
 
         // REFLECTION !!
         // NOTE : We need to make sure it works after obfuscation and so we use the ReflectionHelper class
@@ -208,13 +220,13 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         // This block hacks into game to set MaxPlayers, MaxViewDistance and whitelist settings.
         try {
             // Set MaxPlayers
-            Field field = ReflectionHelper.findField(PlayerList.class,"maxPlayers","field_72405_c");
+            Field field = ReflectionHelper.findField(ServerConfigurationManager.class,"maxPlayers","field_72405_c");
             field.setAccessible(true);
             field.set(customPlayerList, ServerProperties.getIntProperty("max-players", 10));
             LOGGER.info("Max Players = "+customPlayerList.getMaxPlayers());
 
             // Set MaxViewDistance
-            Field dist = ReflectionHelper.findField(PlayerList.class,"viewDistance","field_72402_d");
+            Field dist = ReflectionHelper.findField(ServerConfigurationManager.class,"viewDistance","field_72402_d");
             dist.setAccessible(true);
             int d = ServerProperties.getIntProperty("max-view-distance", 0);
             if(d>0)
@@ -232,10 +244,11 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
                 UserListWhitelist whitelist = new UserListWhitelist(whitelistjson);
                 if(!whitelistjson.exists()) {
                     whitelistjson.createNewFile();
-                    whitelist.writeChanges();
+                    // writeChanges()
+                    whitelist.func_152678_f();
                     whiteListFirstRun = true;
                     // Set WhiteList
-                    field = ReflectionHelper.findField(PlayerList.class,"whiteListedPlayers","field_72411_j");
+                    field = ReflectionHelper.findField(ServerConfigurationManager.class,"whiteListedPlayers","field_72411_j");
                     field.setAccessible(true);
                     field.set(customPlayerList, whitelist);
                 }
@@ -244,7 +257,7 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
                     customPlayerList.setWhiteListEnabled(true);
                 }
             }
-            server.setPlayerList(customPlayerList);
+            //server.setPlayerList(customPlayerList);
         }
         catch (Exception e)
         {
@@ -262,93 +275,6 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
             } catch (IOException e) {
                 LOGGER.error("Oops..! Couldn't copy to local server config file. Please manually copy the global server config file to your world save directory.");
                 e.printStackTrace();
-            }
-        }
-    }
-
-    /*
-    /**
-     *  ** Abandoned **
-     * THIS DOESN'T WORK.
-     * initiateShutdown() causes NullPointerException for some reason.
-     * Also initiateShutdown() may be 1.9+ only.
-     * This function is subscribed to the {@link EventBus} via the {@link Subscribe} annotation.
-     * The type of event({@link net.minecraftforge.fml.common.eventhandler.Event}) to be subscribed is judged from the prototype.
-     * This function is executed by forge when the server is ready to play.
-     *
-     * It is used by SPLAN(this mod) to initiate the ServerHangWatchdog which watches the server's maxTickTime.
-     *
-     *
-    @Subscribe
-    public void onServerStarted(FMLServerStartedEvent event)
-    {
-        // Invalid maxTickTime value gets no love.
-        if(maxTickTime<1)return;
-
-        // Run a thread to keep checking the tick time of the server to see if it is greater than the maxTickTime.
-        Thread thread1 = new Thread(()->{
-            // A field in the MinecraftServer class storing the current time as thought by the server.
-            Field field = ReflectionHelper.findField(MinecraftServer.class,"currentTime","field_175591_ab");
-            field.setAccessible(true);
-
-            // Variables to store server time and calculated tick time.
-            long i,k;
-            // Boolean to avoid shutting down in the first tick.
-            boolean firstrun = true;
-            while(server.isServerRunning())
-            {
-                // Wait for a player to connect.
-                if(server.getCurrentPlayerCount()<1)
-                {
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    continue;
-                }
-                try {
-                    // Get the server's time variable value.
-                    i = (long)field.get(server);
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                    break;
-                }
-                // Calculate the current tick time.
-                k = MinecraftServer.getCurrentTimeMillis() - i;
-
-                // Avoid startup lag and check if tick time exceeds the allowed max value.
-                if(k>maxTickTime && !firstrun)
-                {
-                    LOGGER.fatal("A single server tick took {} milliseconds (should be max {})", k, maxTickTime);
-                    LOGGER.fatal("Considering it to be crashed, server will forcibly shutdown.");
-                    server.initiateShutdown();
-                    break;
-                }
-                firstrun = false;
-            }
-        });
-        thread1.setName("LAN Server Tick Watchdog");
-        thread1.setDaemon(true);
-        thread1.start();
-
-    }*/
-
-    /**
-     * This doesn't work sadly ! :(
-     * The Event is never fired on the client side it seems :(
-     * */
-    @Subscribe
-    public void onPlayerConnect(EntityJoinWorldEvent e) {
-        System.out.println("==================>> Player Connect");
-        if (whiteListFirstRun) {
-            System.out.println("--------------ID="+e.getEntity().getUniqueID()+"\tNAME="+e.getEntity().getName());
-            server.getPlayerList().addWhitelistedPlayer(e.getEntity().getServer().getPlayerList().getOnlinePlayerProfiles()[0]);
-            server.getPlayerList().setWhiteListEnabled(true);
-            try {
-                server.getPlayerList().getWhitelistedPlayers().writeChanges();
-            } catch (IOException e1) {
-                e1.printStackTrace();
             }
         }
     }
@@ -388,42 +314,6 @@ public class ServerPropertiesLAN extends DummyModContainer implements IFMLLoadin
         return instance;
     }
 
-
-    /**
-     * This function checks the current ResoursePackSHA's validity
-     * and returns the final ResoursePackSHA values of the server.
-     */
-    private String loadResourcePackSHA()
-    {
-        if (ServerProperties.hasProperty("resource-pack-hash"))
-        {
-            if (ServerProperties.hasProperty("resource-pack-sha1"))
-            {
-                LOGGER.warn("resource-pack-hash is deprecated and found along side resource-pack-sha1. resource-pack-hash will be ignored.");
-            }
-            else
-            {
-                LOGGER.warn("resource-pack-hash is deprecated. Please use resource-pack-sha1 instead.");
-                ServerProperties.getStringProperty("resource-pack-sha1", ServerProperties.getStringProperty("resource-pack-hash", ""));
-                ServerProperties.removeProperty("resource-pack-hash");
-            }
-        }
-
-        String s = ServerProperties.getStringProperty("resource-pack-sha1", "");
-
-        if (!s.isEmpty() && !Pattern.compile("^[a-fA-F0-9]{40}$").matcher(s).matches())
-        {
-            LOGGER.warn("Invalid sha1 for ressource-pack-sha1");
-        }
-
-        if (!ServerProperties.getStringProperty("resource-pack", "").isEmpty() && s.isEmpty())
-        {
-            LOGGER.warn("You specified a resource pack without providing a sha1 hash. Pack will be updated on the client only if you change the name of the pack.");
-        }
-
-        return s;
-    }
-    @Override
     public URL getUpdateUrl()
     {
         try{
